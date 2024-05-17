@@ -2,44 +2,81 @@ import streamlit as st
 import streamlit_antd_components as sac
 import folium
 from streamlit_folium import st_folium
+import pandas as pd
+from data import load_data
 
+ 
 def display_shelter_info(shelters_df, supplies_df, page_size=10):
     # Função para exibir informações de um abrigo
     def display_shelter_details(shelter, supplies_df):
         with st.container(border=True):
             # Nome do abrigo
-            st.subheader(shelter['name'])
+            st.write(f"### {shelter['name']}")
 
-            # Endereço
-            st.write(shelter['address'])
+            # Endereço em tamanho menor
+            st.write(f"##### {shelter['address']}")
 
-            # Verificar se precisa de doações
-            needs_donations = supplies_df[(supplies_df['shelterId'] == shelter['id']) & (supplies_df['tags'].str.contains('NeedDonations'))]
-            if not needs_donations.empty:
-                st.write("Necessita urgente doações de:")
+            # Status do abrigo
+            if pd.notna(shelter['capacity']):
+                if shelter['shelteredPeople'] >= shelter['capacity']:
+                    status = "Lotado"
+                    color = "#f45136"
+                else:
+                    status = "Disponível"
+                    color = "#21aa16"
+            else:
+                status = "Consultar disponibilidade"
+                color = "#368df4"
+            
+            sac.tags(
+                [sac.Tag(label=status, bordered=True)],
+                format_func='title',
+                align='start',
+                direction='horizontal',
+                size='lg',
+                color=color,
+                key=f"status_{shelter['id']}"
+            )
+
+            all_shelters_df, all_supplies_df = load_data()  
+            # Necessita Urgente de
+            urgent_needs = all_supplies_df[(all_supplies_df['shelterId'] == shelter['id']) & (all_supplies_df['priority'] >= 10)]
+            if not urgent_needs.empty:
+                st.write("##### Necessita Urgente de:")
+                urgent_tags = [
+                    sac.Tag(label=item['supply_name'], color='red' if item['priority'] == 100 else 'orange', bordered=True)
+                    for _, item in urgent_needs.iterrows()
+                ]
                 sac.tags(
-                    [sac.Tag(label=item, bordered=True) for item in needs_donations['supply_name'].unique()],
-                    format_func='title', align='start', direction='horizontal',
-                    key=f"donations_{shelter['id']}"
+                    urgent_tags,
+                    format_func='title',
+                    align='start',
+                    direction='horizontal',
+                    size='lg',
+                    key=f"urgent_{shelter['id']}"
                 )
 
-            # Verificar se precisa de voluntários
-            needs_volunteers = supplies_df[(supplies_df['shelterId'] == shelter['id']) & (supplies_df['tags'].str.contains('NeedVolunteers'))]
-            if not needs_volunteers.empty:
-                st.write("Necessita voluntários:")
+            # Sobrando para doações
+            available_for_donation = supplies_df[(supplies_df['shelterId'] == shelter['id']) & (supplies_df['priority'] == 1)]
+            if not available_for_donation.empty:
+                st.write("##### Sobrando para doações:")
+                donation_tags = [
+                    sac.Tag(label=item, color='green', bordered=True)
+                    for item in available_for_donation['supply_name'].unique()
+                ]
                 sac.tags(
-                    [sac.Tag(label=item, bordered=True) for item in needs_volunteers['supply_name'].unique()],
-                    format_func='title', align='start', direction='horizontal',
-                    key=f"volunteers_{shelter['id']}"
+                    donation_tags,
+                    format_func='title',
+                    align='start',
+                    direction='horizontal',
+                    size='lg',
+                    key=f"donation_{shelter['id']}"
                 )
 
-            # Verificar se tem itens disponíveis para doação
-            available_supplies = supplies_df[supplies_df['shelterId'] == shelter['id']]
-            if not available_supplies.empty:
-                sac.tags([sac.Tag(label="Abrigo tem itens disponíveis para doação!", bordered=True, color='green')],
-                        format_func='title', align='start', direction='horizontal',
-                        key=f"available_{shelter['id']}")
-    
+            # Atualizado em
+            updated_at = pd.to_datetime(shelter['updatedAt']).strftime('%d/%m/%Y %H:%M')
+            st.caption(f"**Atualizado em: {updated_at}**")
+
     # Ordenar os abrigos pela coluna prioritySum em ordem decrescente
     shelters_df = shelters_df.sort_values(by='prioritySum', ascending=False)
 
@@ -58,7 +95,6 @@ def display_shelter_info(shelters_df, supplies_df, page_size=10):
     current_shelters = shelters_df.iloc[start_idx:end_idx]
     for index, shelter in current_shelters.iterrows():
         display_shelter_details(shelter, supplies_df)
-
 
 def shelter_maps(shelter_df):
     # Filtrar abrigos com latitude e longitude válidas

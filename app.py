@@ -52,7 +52,7 @@ with st.sidebar:
 
     if st.button("Recarregar", type='primary', use_container_width=True):
         st.cache_data.clear()
-        st.experimental_rerun()
+        st.rerun()
 
 # Conteúdo principal
 if menu == 0:
